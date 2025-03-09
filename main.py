@@ -1,161 +1,128 @@
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.colors import HexColor
-from PIL import Image
+import layout
+from pdfworker import process_developer_pdf
 import os
 
 
-def create_pitch_deck(output_filename, header_image_path, title="Investment Opportunity"):
+def create_pitch_deck(output_filename, header_image_path, developer_pdf=None, title="Investment Opportunity"):
     """
-    Creates a one-page pitch deck PDF with a header image.
+    Creates a one-page pitch deck PDF with property details and description.
 
     Args:
-        output_filename (str): Path where to save the PDF.
-        header_image_path (str): Path to the header image.
-        title (str): Title for the pitch deck.
+        output_filename (str): Path where to save the PDF
+        header_image_path (str): Path to the header image
+        developer_pdf (str): Path to developer's PDF (optional)
+        title (str): Title for the pitch deck
     """
-    # Define company colors
-    primary_color = HexColor('#186685')  # Dark blue
-    secondary_color = HexColor('#50adc9')  # Light blue
-    background_color = HexColor('#e2ecf4')  # Light background
-    text_color = HexColor('#186685')  # Using primary color for text
-    white = HexColor('#ffffff')  # White
+    # Process developer PDF if provided
+    if developer_pdf and os.path.exists(developer_pdf):
+        description_lines, available_units = process_developer_pdf(developer_pdf)
+    else:
+        # Default content if no PDF is provided
+        description_lines = [
+            "This premium investment property offers an exceptional opportunity in the heart of the city's",
+            "most vibrant district. Recently renovated with high-end finishes, the property features modern",
+            "amenities, energy-efficient systems, and a versatile floor plan suitable for various commercial",
+            "purposes. With strong tenant demand in the area and projected growth, this investment promises",
+            "consistent returns and appreciation potential."
+        ]
 
-    # Define page dimensions (letter size)
-    width, height = letter
+        available_units = [
+            {
+                "unit_id": "A101",
+                "size": "1,250",
+                "price": "$750,000",
+                "bedrooms": 2,
+                "bathrooms": 2,
+                "features": "Corner unit with balcony"
+            },
+            {
+                "unit_id": "B205",
+                "size": "1,800",
+                "price": "$1,050,000",
+                "bedrooms": 3,
+                "bathrooms": 2.5,
+                "features": "Penthouse with city view"
+            },
+            {
+                "unit_id": "C103",
+                "size": "950",
+                "price": "$580,000",
+                "bedrooms": 1,
+                "bathrooms": 1,
+                "features": "Studio with modern kitchen"
+            }
+        ]
 
-    # Create a new PDF with ReportLab
-    c = canvas.Canvas(output_filename, pagesize=letter)
+    # Initialize the PDF with our layout
+    c, width, height, header_height, content_start_y = layout.initialize_pdf_layout(
+        output_filename, header_image_path, title
+    )
 
-    # Fill page with background color
-    c.setFillColor(white)
-    c.rect(0, 0, width, height, fill=True)
+    # ============ DESCRIPTION SECTION ============
+    section_y = content_start_y  # Start position for the first section
 
-    # Calculate header area (top 15% of page)
-    header_height = height * 0.15
+    # Add Description section header
+    c.setFillColor(layout.PRIMARY_COLOR)
+    c.setFont("Helvetica", 12)
+    c.drawString(50, section_y, "Property Description:")
 
-    # Process and place the header image
-    if os.path.exists(header_image_path):
-        # Open image
-        img = Image.open(header_image_path)
-        img_width, img_height = img.size
+    # Add the description paragraph
+    c.setFillColor(layout.TEXT_COLOR)
+    c.setFont("Helvetica", 10)
+    line_height = 15  # spacing between lines
+    for i, line in enumerate(description_lines):
+        c.drawString(70, section_y - 20 - (i * line_height), line)
 
-        # Calculate dimensions for cropping
-        # We want to keep the image width-to-height ratio equal to the header area's ratio
-        target_ratio = width / header_height
+    # ============ AVAILABLE UNITS SECTION ============
+    # Calculate the Y position for the units section (below description)
+    units_y = section_y - 30 - (len(description_lines) * line_height)
 
-        if img_width / img_height > target_ratio:  # Image is wider than needed
-            # Calculate new height to maintain aspect ratio
-            crop_height = img_height
-            crop_width = crop_height * target_ratio
+    # Add Available Units section header
+    c.setFillColor(layout.PRIMARY_COLOR)
+    c.setFont("Helvetica", 12)
+    c.drawString(50, units_y, "Available Units:")
 
-            # Center the crop horizontally
-            left = (img_width - crop_width) / 2
-            right = left + crop_width
+    # Add table headers
+    c.setFillColor(layout.SECONDARY_COLOR)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(70, units_y - 20, "Unit")
+    c.drawString(130, units_y - 20, "Size (sq ft)")
+    c.drawString(210, units_y - 20, "Price")
+    c.drawString(280, units_y - 20, "Bedrooms")
+    c.drawString(350, units_y - 20, "Features")
 
-            # Crop the image
-            img_cropped = img.crop((left, 0, right, crop_height))
-        else:  # Image is taller than needed
-            # Calculate new width to maintain aspect ratio
-            crop_width = img_width
-            crop_height = crop_width / target_ratio
+    # Add units data
+    c.setFillColor(layout.TEXT_COLOR)
+    c.setFont("Helvetica", 9)
+    for i, unit in enumerate(available_units[:5]):  # Limit to 5 units to fit on page
+        y_pos = units_y - 40 - (i * 15)
+        c.drawString(70, y_pos, unit.get("unit_id", ""))
+        c.drawString(130, y_pos, unit.get("size", ""))
+        c.drawString(210, y_pos, unit.get("price", ""))
+        c.drawString(280, y_pos, f"{unit.get('bedrooms', '')} BR / {unit.get('bathrooms', '')} BA")
 
-            # Center the crop vertically - take from the middle of the image
-            top = (img_height - crop_height) / 2
-            bottom = top + crop_height
+        # Truncate features if too long
+        features = unit.get("features", "")
+        if len(features) > 25:
+            features = features[:22] + "..."
+        c.drawString(350, y_pos, features)
 
-            # Crop the image
-            img_cropped = img.crop((0, top, crop_width, bottom))
-
-        # Save the processed image temporarily
-        temp_image_path = "temp_header.jpg"
-        img_cropped.save(temp_image_path, quality=95)  # High quality
-
-        # Place the image at the top of the page, full width
-        c.drawImage(temp_image_path, 0, height - header_height, width=width, height=header_height)
-
-        # Clean up temporary file
-        os.remove(temp_image_path)
-
-    # Add title below the header area
-    c.setFillColor(primary_color)
-    c.setFont("Helvetica-Bold", 24)
-    c.drawCentredString(width / 2, height - header_height - 40, title)
+    # ============ PROPERTY DETAILS SECTION ============
+    # Calculate the Y position for the details section (below available units)
+    details_y = units_y - 40 - (min(len(available_units), 5) * 15) - 30
 
     # Add section header with primary color
-    c.setFillColor(primary_color)
+    c.setFillColor(layout.PRIMARY_COLOR)
     c.setFont("Helvetica", 12)
-    c.drawString(50, height - header_height - 80, "Property Details:")
+    c.drawString(50, details_y, "Property Details:")
 
     # Placeholder for property details with text color
-    c.setFillColor(text_color)
+    c.setFillColor(layout.TEXT_COLOR)
     c.setFont("Helvetica", 10)
-    c.drawString(70, height - header_height - 100, "• Location: Premium Downtown")
-    c.drawString(70, height - header_height - 115, "• Size: 2,500 sq ft")
-    c.drawString(70, height - header_height - 130, "• Price: $1,200,000")
-    c.drawString(70, height - header_height - 145, "• ROI: 12% annually")
-
-    def add_company_footer(c, width, height, primary_color, secondary_color):
-        """
-        Adds a professional footer with company contact details to the PDF.
-
-        Args:
-            c: ReportLab canvas object
-            width: Page width
-            height: Page height
-            primary_color: Company primary color
-            secondary_color: Company secondary color
-        """
-        # Footer positioning
-        footer_height = 40
-        footer_top = footer_height
-        margin = 50
-
-        # Add subtle separator line
-        c.setStrokeColor(secondary_color)
-        c.setLineWidth(0.75)
-        c.line(margin, footer_top + 10, width - margin, footer_top + 10)
-
-        # Company name in primary color
-        c.setFillColor(primary_color)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(margin, footer_top - 10, "COMPANY NAME")
-
-        # Contact information using secondary color for less emphasis
-        c.setFillColor(secondary_color)
-        c.setFont("Helvetica", 8)
-
-        # Add contact details in columns
-        # Column 1: Address
-        address = "123 Business Avenue, Suite 500"
-        city = "New York, NY 10001"
-        c.drawString(margin, footer_top - 22, address)
-        c.drawString(margin, footer_top - 32, city)
-
-        # Column 2: Phone & Email (centered)
-        phone = "Tel: (555) 123-4567"
-        email = "info@companyname.com"
-
-        # Calculate center position
-        center_x = width / 2
-        c.drawCentredString(center_x, footer_top - 22, phone)
-        c.drawCentredString(center_x, footer_top - 32, email)
-
-        # Column 3: Website & Social (right-aligned)
-        website = "www.companyname.com"
-        social = "LinkedIn: @companyname"
-
-        # Right-aligned text
-        website_width = c.stringWidth(website, "Helvetica", 8)
-        social_width = c.stringWidth(social, "Helvetica", 8)
-
-        c.drawString(width - margin - website_width, footer_top - 22, website)
-        c.drawString(width - margin - social_width, footer_top - 32, social)
-
-    # To use this in your existing code, add it just before c.save():
-    # add_company_footer(c, width, height, primary_color, secondary_color)
-
-    add_company_footer(c, width, height, primary_color, secondary_color)
+    c.drawString(70, details_y - 20, "• Location: Premium Downtown")
+    c.drawString(70, details_y - 35, "• Size: 2,500 sq ft")
+    c.drawString(70, details_y - 50, "• Price: $1,200,000")
+    c.drawString(70, details_y - 65, "• ROI: 12% annually")
 
     # Save the PDF
     c.save()
@@ -168,5 +135,6 @@ if __name__ == "__main__":
     create_pitch_deck(
         "pitch_deck_example.pdf",
         "header_image.jpg",
+        "developer_brochure.pdf",  # This is optional - if the file exists, content will be extracted
         "Premium Investment Property"
     )
