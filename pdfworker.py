@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import json
 
 # Load environment variables from .env file
-load_dootenv()
+load_dotenv()
 
 # Get API key from environment variables for security
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -35,10 +35,13 @@ class PDFProcessor:
             print(f"Error extracting text from PDF: {str(e)}")
             return ""
 
+    # Replace the _call_openai_api method with this:
     def _call_openai_api(self, prompt):
-        """Make a call to OpenAI API with the given prompt."""
+        """Make a call to OpenAI API with the given prompt using the new API."""
         try:
-            response = openai.ChatCompletion.create(
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+            response = client.chat.completions.create(
                 model="gpt-4-turbo",  # Use the appropriate model
                 messages=[
                     {"role": "system",
